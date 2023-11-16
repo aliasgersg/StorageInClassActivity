@@ -10,22 +10,24 @@ import android.widget.Toast
 import com.android.volley.Request
 import com.android.volley.RequestQueue
 import com.android.volley.toolbox.JsonObjectRequest
-import com.android.volley.toolbox.StringRequest
 import com.android.volley.toolbox.Volley
 import com.squareup.picasso.Picasso
 import org.json.JSONObject
-
-// TODO (1: Fix any bugs)
-// TODO (2: Add function saveComic(...) to save and load comic info automatically when app starts)
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.nio.charset.Charset
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var requestQueue: RequestQueue
-    lateinit var titleTextView: TextView
-    lateinit var descriptionTextView: TextView
-    lateinit var numberEditText: EditText
-    lateinit var showButton: Button
-    lateinit var comicImageView: ImageView
+    private lateinit var titleTextView: TextView
+    private lateinit var descriptionTextView: TextView
+    private lateinit var numberEditText: EditText
+    private lateinit var showButton: Button
+    private lateinit var comicImageView: ImageView
+
+    private val fileName = "savedComic.txt"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,31 +35,62 @@ class MainActivity : AppCompatActivity() {
 
         requestQueue = Volley.newRequestQueue(this)
 
-        titleTextView = findViewById<TextView>(R.id.comicTitleTextView)
-        descriptionTextView = findViewById<TextView>(R.id.comicDescriptionTextView)
-        numberEditText = findViewById<EditText>(R.id.comicNumberEditText)
-        showButton = findViewById<Button>(R.id.showComicButton)
-        comicImageView = findViewById<ImageView>(R.id.comicImageView)
+        titleTextView = findViewById(R.id.comicTitleTextView)
+        descriptionTextView = findViewById(R.id.comicDescriptionTextView)
+        numberEditText = findViewById(R.id.comicNumberEditText)
+        showButton = findViewById(R.id.showComicButton)
+        comicImageView = findViewById(R.id.comicImageView)
 
         showButton.setOnClickListener {
-            downloadComic(numberEditText.text.toString())
+            val comicId = numberEditText.text.toString()
+            if (comicId.isNotEmpty()) {
+                downloadComic(comicId)
+            } else {
+                Toast.makeText(this, "Please enter a comic number", Toast.LENGTH_SHORT).show()
+            }
         }
 
+        loadSavedComicInfo()
     }
 
-    private fun downloadComic (comicId: String) {
+    private fun downloadComic(comicId: String) {
         val url = "https://xkcd.com/$comicId/info.0.json"
-        requestQueue.add (
-            JsonObjectRequest(url, {showComic(it)}, {
-            })
+        val jsonObjectRequest = JsonObjectRequest(
+            Request.Method.GET, url, null,
+            { response -> showComic(response) },
+            { error -> Toast.makeText(this, "Error: ${error.message}", Toast.LENGTH_LONG).show() }
         )
+        requestQueue.add(jsonObjectRequest)
     }
 
-    private fun showComic (comicObject: JSONObject) {
-        titleTextView.text = comicObject.getString("title")
-        descriptionTextView.text = comicObject.getString("alt")
-        Picasso.get().load(comicObject.getString("img")).into(comicImageView)
+    private fun showComic(comicObject: JSONObject) {
+        val title = comicObject.getString("title")
+        val description = comicObject.getString("alt")
+        val imageUrl = comicObject.getString("img")
+
+        titleTextView.text = title
+        descriptionTextView.text = description
+        Picasso.get().load(imageUrl).into(comicImageView)
+
+        saveComicInfo(comicObject.getString("num"), title, description, imageUrl)
     }
 
+    private fun saveComicInfo(comicId: String, title: String, description: String, imageUrl: String) {
+        val fileContent = "$comicId|$title|$description|$imageUrl"
+        openFileOutput(fileName, MODE_PRIVATE).use { outputStream ->
+            outputStream.write(fileContent.toByteArray())
+        }
+    }
 
+    private fun loadSavedComicInfo() {
+        val file = File(filesDir, fileName)
+        if (file.exists()) {
+            val content = FileInputStream(file).bufferedReader().use { it.readText() }
+            val (comicId, title, description, imageUrl) = content.split('|')
+            titleTextView.text = title
+            descriptionTextView.text = description
+            Picasso.get().load(imageUrl).into(comicImageView)
+            numberEditText.setText(comicId)
+        }
+    }
 }
